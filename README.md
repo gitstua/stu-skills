@@ -58,4 +58,4 @@ location to `~/.agents/skills` using the same pattern above.
 
 ## License
 
-MIT. See LICENSE.
+GNU General Public License v3.0 only (GPL-3.0-only). See LICENSE.

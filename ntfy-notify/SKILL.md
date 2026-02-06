@@ -1,6 +1,7 @@
 ---
 name: ntfy-notify
 description: Send push notifications via ntfy.sh with a lightweight shell workflow. Use when posting alerts, job status updates, reminders, or automation results to an ntfy topic using token auth or public topics.
+license: GPL-3.0-only
 ---
 
 # ntfy Notify

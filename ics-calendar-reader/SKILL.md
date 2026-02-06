@@ -1,6 +1,7 @@
 ---
 name: ics-calendar-reader
 description: Read, parse, and summarize iCalendar (.ics) files from Google Calendar, Apple Calendar, and similar providers. Use when extracting upcoming events, filtering by date range, converting ICS events to JSON/text, or debugging calendar fields like DTSTART/DTEND/TZID/RRULE.
+license: GPL-3.0-only
 ---
 
 # ICS Calendar Reader
