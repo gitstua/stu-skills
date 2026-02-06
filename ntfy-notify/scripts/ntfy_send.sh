@@ -7,23 +7,23 @@ Usage:
   ntfy_send.sh [options] "message"
 
 Options:
-  --topic <name>       Topic name (default: $NTFY_TOPIC)
+  --topic <name>       Topic name (default: $NTFY_DEFAULT_TOPIC)
   --server <url>       Server URL (default: $NTFY_SERVER or https://ntfy.sh)
   --title <text>       Notification title
   --priority <1-5>     Priority level
   --tags <csv>         Comma-separated tags
-  --token <token>      Auth token (default: $NTFY_TOKEN)
+  --token <token>      Auth token (default: $NTFY_ACCESS_TOKEN, fallback: $NTFY_TOKEN)
   --dry-run            Print curl command only
   -h, --help           Show this help
 USAGE
 }
 
-TOPIC="${NTFY_TOPIC:-}"
+TOPIC="${NTFY_DEFAULT_TOPIC:-}"
 SERVER="${NTFY_SERVER:-https://ntfy.sh}"
 TITLE=""
 PRIORITY=""
 TAGS=""
-TOKEN="${NTFY_TOKEN:-}"
+TOKEN="${NTFY_ACCESS_TOKEN:-${NTFY_TOKEN:-}}"
 DRY_RUN=0
 
 while [[ $# -gt 0 ]]; do
@@ -51,7 +51,8 @@ fi
 MESSAGE="$1"
 
 if [[ -z "$TOPIC" ]]; then
-  echo "Topic is required. Pass --topic or set NTFY_TOPIC." >&2
+  echo "Missing prerequisite: set NTFY_DEFAULT_TOPIC (or pass --topic)." >&2
+  echo "Ask the user to provide NTFY_DEFAULT_TOPIC for this session." >&2
   exit 2
 fi
 

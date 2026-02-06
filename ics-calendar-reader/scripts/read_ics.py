@@ -8,6 +8,7 @@ import datetime as dt
 import json
 import os
 import re
+import sys
 import urllib.request
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -181,6 +182,28 @@ def normalize_event_start(event: Dict[str, object]) -> Optional[dt.datetime]:
         return None
 
 
+def format_local_datetime(value: object, all_day: bool = False) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+
+    try:
+        local_tz = dt.datetime.now().astimezone().tzinfo
+        if len(value) == 10:
+            d = dt.date.fromisoformat(value)
+            if all_day:
+                return f"{d.strftime('%a')} {d.day} {d.strftime('%b')} (all day)"
+            local_dt = dt.datetime.combine(d, dt.time.min).replace(tzinfo=local_tz)
+            return f"{local_dt.strftime('%a')} {local_dt.day} {local_dt.strftime('%b %H:%M')}"
+
+        parsed = dt.datetime.fromisoformat(value)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=local_tz)
+        local_dt = parsed.astimezone(local_tz)
+        return f"{local_dt.strftime('%a')} {local_dt.day} {local_dt.strftime('%b %H:%M')}"
+    except Exception:
+        return value
+
+
 def filter_events(
     events: List[Dict[str, object]],
     after: Optional[dt.datetime],
@@ -211,9 +234,11 @@ def render_text(events: List[Dict[str, object]]) -> str:
 
     lines: List[str] = []
     for idx, event in enumerate(events, start=1):
+        start_local = format_local_datetime(event.get("start"), bool(event.get("all_day")))
+        end_local = format_local_datetime(event.get("end"), bool(event.get("all_day")))
         lines.append(f"{idx}. {event.get('summary') or '(no title)'}")
-        lines.append(f"   start: {event.get('start')}")
-        lines.append(f"   end: {event.get('end')}")
+        lines.append(f"   start: {start_local}")
+        lines.append(f"   end: {end_local}")
         lines.append(f"   all_day: {event.get('all_day')}")
         if event.get("location"):
             lines.append(f"   location: {event.get('location')}")
@@ -227,26 +252,58 @@ def render_text(events: List[Dict[str, object]]) -> str:
     return "\n".join(lines)
 
 
+def split_urls(values: List[str]) -> List[str]:
+    urls: List[str] = []
+    for value in values:
+        for item in value.split(","):
+            cleaned = item.strip()
+            if cleaned:
+                urls.append(cleaned)
+    return urls
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Parse iCalendar (.ics) events")
     parser.add_argument("ics_path", nargs="?", help="Path to .ics file")
-    parser.add_argument("--url", help="HTTPS iCal URL to fetch")
+    parser.add_argument(
+        "--url",
+        action="append",
+        help="HTTPS iCal URL to fetch (repeatable or comma-separated)",
+    )
     parser.add_argument("--after", help="ISO datetime or 'now'")
     parser.add_argument("--before", help="ISO datetime")
     parser.add_argument("--limit", type=int, default=None)
-    parser.add_argument("--format", choices=["json", "text"], default="json")
+    parser.add_argument("--format", choices=["json", "text"], default="text")
     args = parser.parse_args()
-    
-    url = args.url or os.environ.get("ICS_URL")
-    if url:
+
+    raw_url_inputs: List[str] = args.url or []
+    if not raw_url_inputs:
+        env_urls = os.environ.get("ICS_URLS")
+        if env_urls:
+            raw_url_inputs.append(env_urls)
+        elif os.environ.get("ICS_URL"):
+            # Backward-compatible fallback for older setups.
+            raw_url_inputs.append(os.environ["ICS_URL"])
+    urls = split_urls(raw_url_inputs)
+
+    if not args.ics_path and not urls:
+        print(
+            "Missing prerequisite: set ICS_URLS to one or more calendar URLs "
+            "(comma-separated), or pass --url/ics_path.\n"
+            "Ask the user to provide ICS_URLS for this session.",
+            file=sys.stderr,
+        )
+        return 2
+
+    events: List[Dict[str, object]] = []
+    if args.ics_path:
+        content = Path(args.ics_path).read_text(encoding="utf-8", errors="replace")
+        events.extend(parse_ics_events(content))
+
+    for url in urls:
         with urllib.request.urlopen(url) as response:
             content = response.read().decode("utf-8", errors="replace")
-    elif args.ics_path:
-        content = Path(args.ics_path).read_text(encoding="utf-8", errors="replace")
-    else:
-        parser.error("Provide ics_path, --url, or set ICS_URL")
-
-    events = parse_ics_events(content)
+        events.extend(parse_ics_events(content))
 
     after = parse_filter_dt(args.after) if args.after else None
     before = parse_filter_dt(args.before) if args.before else None

@@ -8,12 +8,20 @@ license: GPL-3.0-only
 
 Use `scripts/ntfy_send.sh` for deterministic, low-overhead notifications.
 
+## Prerequisites
+
+- Required default topic: `NTFY_DEFAULT_TOPIC`
+  - Example: `export NTFY_DEFAULT_TOPIC="my-topic"`
+- Optional auth: `NTFY_ACCESS_TOKEN` (script also accepts legacy `NTFY_TOKEN`)
+  - Example: `export NTFY_ACCESS_TOKEN="<your-ntfy-access-token>"`
+- If `NTFY_DEFAULT_TOPIC` is missing and `--topic` is not passed, the script exits with an instruction for the agent to ask the user for it.
+
 ## Configure
 
 1. Set a default topic:
-   - `export NTFY_TOPIC="my-topic"`
+   - `export NTFY_DEFAULT_TOPIC="my-topic"`
 2. Optionally set token auth:
-   - `export NTFY_TOKEN="<your-ntfy-token>"`
+   - `export NTFY_ACCESS_TOKEN="<your-ntfy-access-token>"`
 3. Optional custom server (default is `https://ntfy.sh`):
    - `export NTFY_SERVER="https://ntfy.sh"`
 
