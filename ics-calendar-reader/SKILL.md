@@ -14,7 +14,9 @@ Parse `.ics` files with `scripts/read_ics.py` instead of hand-parsing text.
   - Example: `export ICS_URLS="https://example.com/a.ics,https://example.com/b.ics"`
 - Secrets/defaults file: `~/.config/stu-skills/ics-calendar-reader/.env`
   - The script reads this path from `ics-calendar-reader/.env-path` automatically.
-- If `ICS_URLS` is missing and no `--url`/`ics_path` is provided, the script exits with an instruction for the agent to ask the user for it.
+- If `ICS_URLS` is missing and no `ics_path` is provided, the script exits with an instruction for the agent to ask the user for it.
+- Do not paste private calendar URLs in prompts or command lines; run the script and let it read from env.
+- The parser refuses `--url` inputs by design and instructs using `ICS_URLS` from `.env`.
 
 ## .env Sample
 
@@ -28,11 +30,11 @@ ICS_URLS="https://example.com/a.ics,https://example.com/b.ics"
 
 1. Run the parser on the file and request JSON for reliable downstream use:
    - `python3 scripts/read_ics.py /path/to/calendar.ics --format json`
-   - `python3 scripts/read_ics.py --url "https://example.com/calendar.ics" --format json`
+   - `python3 scripts/read_ics.py --format json`
 2. Filter to upcoming events or a window:
    - `python3 scripts/read_ics.py /path/to/calendar.ics --after now --limit 20 --format json`
    - `python3 scripts/read_ics.py /path/to/calendar.ics --after 2026-02-01T00:00:00 --before 2026-03-01T00:00:00 --format json`
-   - `ICS_URLS="https://example.com/calendar.ics,https://example.com/team.ics" python3 scripts/read_ics.py --after now --limit 20 --format json`
+   - `python3 scripts/read_ics.py --after now --limit 20 --format json`
 3. Use text output for quick human review:
    - `python3 scripts/read_ics.py /path/to/calendar.ics --format text`
 
@@ -55,6 +57,7 @@ Expect each event to include:
 
 - Treat parsed JSON as source of truth for further transformations.
 - Keep timezone-aware datetimes intact; do not strip offsets.
+- When presenting datetimes to users, default to local timezone with format `Sat 7 Feb 2026 16:43` (`%a %-d %b %Y %H:%M`).
 - For recurring events, treat each VEVENT record present in the file as one parsed item.
 - If needed, read `references/ics-fields.md` for quick field semantics.
-- For private calendar subscriptions, prefer storing URLs in `ICS_URLS` instead of pasting them repeatedly.
+- For private calendar subscriptions, store URLs in `ICS_URLS` and avoid inline URLs entirely.

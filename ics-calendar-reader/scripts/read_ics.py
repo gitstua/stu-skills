@@ -246,15 +246,15 @@ def format_local_datetime(value: object, all_day: bool = False) -> Optional[str]
         if len(value) == 10:
             d = dt.date.fromisoformat(value)
             if all_day:
-                return f"{d.strftime('%a')} {d.day} {d.strftime('%b')} (all day)"
+                return f"{d.strftime('%a')} {d.day} {d.strftime('%b %Y')} (all day)"
             local_dt = dt.datetime.combine(d, dt.time.min).replace(tzinfo=local_tz)
-            return f"{local_dt.strftime('%a')} {local_dt.day} {local_dt.strftime('%b %H:%M')}"
+            return f"{local_dt.strftime('%a')} {local_dt.day} {local_dt.strftime('%b %Y %H:%M')}"
 
         parsed = dt.datetime.fromisoformat(value)
         if parsed.tzinfo is None:
             parsed = parsed.replace(tzinfo=local_tz)
         local_dt = parsed.astimezone(local_tz)
-        return f"{local_dt.strftime('%a')} {local_dt.day} {local_dt.strftime('%b %H:%M')}"
+        return f"{local_dt.strftime('%a')} {local_dt.day} {local_dt.strftime('%b %Y %H:%M')}"
     except Exception:
         return value
 
@@ -320,13 +320,15 @@ def split_urls(values: List[str]) -> List[str]:
 def main() -> int:
     skill_root = Path(__file__).resolve().parent.parent
     load_env_defaults(skill_root)
+    configured_env_path = resolve_env_file_from_config(skill_root)
 
     parser = argparse.ArgumentParser(description="Parse iCalendar (.ics) events")
     parser.add_argument("ics_path", nargs="?", help="Path to .ics file")
     parser.add_argument(
         "--url",
         action="append",
-        help="HTTPS iCal URL to fetch (repeatable or comma-separated)",
+        default=[],
+        help=argparse.SUPPRESS,
     )
     parser.add_argument("--after", help="ISO datetime or 'now'")
     parser.add_argument("--before", help="ISO datetime")
@@ -334,20 +336,32 @@ def main() -> int:
     parser.add_argument("--format", choices=["json", "text"], default="text")
     args = parser.parse_args()
 
-    raw_url_inputs: List[str] = args.url or []
-    if not raw_url_inputs:
-        env_urls = os.environ.get("ICS_URLS")
-        if env_urls:
-            raw_url_inputs.append(env_urls)
-        elif os.environ.get("ICS_URL"):
-            # Backward-compatible fallback for older setups.
-            raw_url_inputs.append(os.environ["ICS_URL"])
+    if args.url:
+        env_hint = (
+            str(configured_env_path)
+            if configured_env_path is not None
+            else "~/.config/stu-skills/ics-calendar-reader/.env"
+        )
+        print(
+            "Refusing --url for privacy. Store calendar URLs in ICS_URLS via "
+            f"{env_hint}, then run without --url.",
+            file=sys.stderr,
+        )
+        return 2
+
+    raw_url_inputs: List[str] = []
+    env_urls = os.environ.get("ICS_URLS")
+    if env_urls:
+        raw_url_inputs.append(env_urls)
+    elif os.environ.get("ICS_URL"):
+        # Backward-compatible fallback for older setups.
+        raw_url_inputs.append(os.environ["ICS_URL"])
     urls = split_urls(raw_url_inputs)
 
     if not args.ics_path and not urls:
         print(
             "Missing prerequisite: set ICS_URLS to one or more calendar URLs "
-            "(comma-separated), or pass --url/ics_path.\n"
+            "(comma-separated), or pass ics_path.\n"
             "Ask the user to provide ICS_URLS for this session.",
             file=sys.stderr,
         )
