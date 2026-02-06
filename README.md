@@ -13,6 +13,16 @@ Each skill lives in its own folder with a SKILL.md entry point.
 - <skill>/SKILL.md: The skill entry point and usage guidance.
 - <skill>/scripts/: Supporting scripts for the skill.
 - <skill>/references/: Optional references for the skill.
+- <skill>/.env-path: Path to the skill's external dotenv file (for secrets/defaults).
+
+## Secrets Handling
+
+- Each skill defines one dotenv location in `<skill>/.env-path`.
+- Default convention in this repo:
+  - `~/.config/stu-skills/<skill-name>/.env`
+- Scripts load values from that dotenv file as defaults at runtime.
+- Runtime env vars and explicit CLI args still override dotenv defaults.
+- Keep secret values out of prompts and command arguments; prefer script execution with env-backed defaults.
 
 ## Installation
 

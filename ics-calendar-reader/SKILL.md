@@ -12,7 +12,17 @@ Parse `.ics` files with `scripts/read_ics.py` instead of hand-parsing text.
 
 - Set `ICS_URLS` to one or more calendar URLs (comma-separated).
   - Example: `export ICS_URLS="https://example.com/a.ics,https://example.com/b.ics"`
+- Secrets/defaults file: `~/.config/stu-skills/ics-calendar-reader/.env`
+  - The script reads this path from `ics-calendar-reader/.env-path` automatically.
 - If `ICS_URLS` is missing and no `--url`/`ics_path` is provided, the script exits with an instruction for the agent to ask the user for it.
+
+## .env Sample
+
+Path: `~/.config/stu-skills/ics-calendar-reader/.env`
+
+```dotenv
+ICS_URLS="https://example.com/a.ics,https://example.com/b.ics"
+```
 
 ## Workflow
 

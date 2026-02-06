@@ -23,6 +23,61 @@ DATE_RE = re.compile(r"^\d{8}$")
 DATETIME_RE = re.compile(r"^\d{8}T\d{6}Z?$")
 
 
+def parse_env_line(line: str) -> Optional[Tuple[str, str]]:
+    line = line.strip()
+    if not line or line.startswith("#"):
+        return None
+    if line.startswith("export "):
+        line = line[len("export ") :].strip()
+    if "=" not in line:
+        return None
+
+    key, value = line.split("=", 1)
+    key = key.strip()
+    value = value.strip()
+    if not key:
+        return None
+
+    if len(value) >= 2 and (
+        (value.startswith('"') and value.endswith('"'))
+        or (value.startswith("'") and value.endswith("'"))
+    ):
+        value = value[1:-1]
+
+    return key, value
+
+
+def resolve_env_file_from_config(skill_root: Path) -> Optional[Path]:
+    config_path = skill_root / ".env-path"
+    if not config_path.exists():
+        return None
+
+    for raw_line in config_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+
+        expanded = os.path.expanduser(line)
+        env_path = Path(expanded)
+        if env_path.exists():
+            return env_path
+        return None
+    return None
+
+
+def load_env_defaults(skill_root: Path) -> None:
+    env_file = resolve_env_file_from_config(skill_root)
+    if env_file is None:
+        return
+
+    for raw_line in env_file.read_text(encoding="utf-8", errors="replace").splitlines():
+        parsed = parse_env_line(raw_line)
+        if parsed is None:
+            continue
+        key, value = parsed
+        os.environ.setdefault(key, value)
+
+
 def unfold_ical_lines(text: str) -> List[str]:
     """Join folded ICS lines (continuations start with space or tab)."""
     raw_lines = text.splitlines()
@@ -263,6 +318,9 @@ def split_urls(values: List[str]) -> List[str]:
 
 
 def main() -> int:
+    skill_root = Path(__file__).resolve().parent.parent
+    load_env_defaults(skill_root)
+
     parser = argparse.ArgumentParser(description="Parse iCalendar (.ics) events")
     parser.add_argument("ics_path", nargs="?", help="Path to .ics file")
     parser.add_argument(

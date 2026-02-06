@@ -1,6 +1,61 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SKILL_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+ENV_PATH_CONFIG_FILE="$SKILL_ROOT/.env-path"
+
+trim() {
+  local value="$1"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s' "$value"
+}
+
+resolve_home_path() {
+  local value="$1"
+  if [[ "$value" == "~" ]]; then
+    printf '%s' "$HOME"
+    return
+  fi
+  if [[ "$value" == "~/"* ]]; then
+    printf '%s/%s' "$HOME" "${value#~/}"
+    return
+  fi
+  printf '%s' "$value"
+}
+
+load_env_defaults() {
+  [[ -f "$ENV_PATH_CONFIG_FILE" ]] || return 0
+
+  local raw_env_path env_file line key value
+  raw_env_path="$(grep -E -v '^[[:space:]]*(#|$)' "$ENV_PATH_CONFIG_FILE" | head -n 1 || true)"
+  raw_env_path="$(trim "$raw_env_path")"
+  [[ -n "$raw_env_path" ]] || return 0
+
+  env_file="$(resolve_home_path "$raw_env_path")"
+  [[ -f "$env_file" ]] || return 0
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="$(trim "$line")"
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    [[ "$line" == export\ * ]] && line="${line#export }"
+    [[ "$line" == *=* ]] || continue
+
+    key="$(trim "${line%%=*}")"
+    value="$(trim "${line#*=}")"
+    [[ -n "$key" ]] || continue
+
+    if [[ ( "$value" == \"*\" && "$value" == *\" ) || ( "$value" == \'*\' && "$value" == *\' ) ]]; then
+      value="${value:1:-1}"
+    fi
+
+    if [[ -z "${!key+x}" ]]; then
+      export "$key=$value"
+    fi
+  done < "$env_file"
+}
+
 usage() {
   cat <<'USAGE'
 Usage:
@@ -17,6 +72,8 @@ Options:
   -h, --help           Show this help
 USAGE
 }
+
+load_env_defaults
 
 TOPIC="${NTFY_DEFAULT_TOPIC:-}"
 SERVER="${NTFY_SERVER:-https://ntfy.sh}"
@@ -83,6 +140,9 @@ CURL_ARGS+=( -d "$MESSAGE" "$URL" )
 if [[ "$DRY_RUN" -eq 1 ]]; then
   printf 'curl'
   for arg in "${CURL_ARGS[@]}"; do
+    if [[ "$arg" == "Authorization: Bearer "* ]]; then
+      arg="Authorization: Bearer <redacted>"
+    fi
     printf ' %q' "$arg"
   done
   printf '\n'
