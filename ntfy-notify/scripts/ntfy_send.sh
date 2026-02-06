@@ -19,7 +19,7 @@ resolve_home_path() {
     return
   fi
   if [[ "$value" == "~/"* ]]; then
-    printf '%s/%s' "$HOME" "${value#~/}"
+    printf '%s/%s' "$HOME" "${value#\~/}"
     return
   fi
   printf '%s' "$value"
@@ -46,8 +46,8 @@ load_env_defaults() {
     value="$(trim "${line#*=}")"
     [[ -n "$key" ]] || continue
 
-    if [[ ( "$value" == \"*\" && "$value" == *\" ) || ( "$value" == \'*\' && "$value" == *\' ) ]]; then
-      value="${value:1:-1}"
+    if [[ ${#value} -ge 2 ]] && [[ ( "$value" == \"*\" && "$value" == *\" ) || ( "$value" == \'*\' && "$value" == *\' ) ]]; then
+      value="${value:1:${#value}-2}"
     fi
 
     if [[ -z "${!key+x}" ]]; then
