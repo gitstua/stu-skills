@@ -10,6 +10,7 @@ import os
 import re
 import sys
 import urllib.request
+from urllib.parse import urlsplit, urlunsplit
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -317,6 +318,17 @@ def split_urls(values: List[str]) -> List[str]:
     return urls
 
 
+def normalize_calendar_url(url: str) -> str:
+    """Normalize calendar URL schemes for urllib compatibility."""
+    parsed = urlsplit(url)
+    scheme = parsed.scheme.lower()
+    if scheme == "webcal":
+        return urlunsplit(("https", parsed.netloc, parsed.path, parsed.query, parsed.fragment))
+    if scheme == "webcals":
+        return urlunsplit(("https", parsed.netloc, parsed.path, parsed.query, parsed.fragment))
+    return url
+
+
 def main() -> int:
     skill_root = Path(__file__).resolve().parent.parent
     load_env_defaults(skill_root)
@@ -373,7 +385,8 @@ def main() -> int:
         events.extend(parse_ics_events(content))
 
     for url in urls:
-        with urllib.request.urlopen(url) as response:
+        normalized_url = normalize_calendar_url(url)
+        with urllib.request.urlopen(normalized_url) as response:
             content = response.read().decode("utf-8", errors="replace")
         events.extend(parse_ics_events(content))
 

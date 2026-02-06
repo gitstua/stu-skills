@@ -17,6 +17,7 @@ Parse `.ics` files with `scripts/read_ics.py` instead of hand-parsing text.
 - If `ICS_URLS` is missing and no `ics_path` is provided, the script exits with an instruction for the agent to ask the user for it.
 - Do not paste private calendar URLs in prompts or command lines; run the script and let it read from env.
 - The parser refuses `--url` inputs by design and instructs using `ICS_URLS` from `.env`.
+- `ICS_URLS` entries using `webcal://` or `webcals://` are normalized to `https://` automatically.
 
 ## .env Sample
 
