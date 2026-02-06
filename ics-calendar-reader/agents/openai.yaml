@@ -1,0 +1,4 @@
+interface:
+  display_name: "ICS Calendar Reader"
+  short_description: "Parse and summarize Google/Apple .ics files"
+  default_prompt: "Use $ics-calendar-reader to extract upcoming events from this .ics file as structured JSON."

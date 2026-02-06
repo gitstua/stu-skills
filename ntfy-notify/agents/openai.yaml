@@ -1,0 +1,4 @@
+interface:
+  display_name: "ntfy Notify"
+  short_description: "Send lightweight push alerts via ntfy"
+  default_prompt: "Use $ntfy-notify to send a notification with title, priority, and tags to my ntfy topic."
