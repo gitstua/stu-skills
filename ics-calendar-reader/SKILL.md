@@ -39,6 +39,16 @@ ICS_URLS="https://example.com/a.ics,https://example.com/b.ics"
 3. Use text output for quick human review:
    - `python3 scripts/read_ics.py /path/to/calendar.ics --format text`
 
+## Cache (URL fetches)
+
+- Remote ICS URLs are cached by default for 900 seconds.
+- Override TTL with `--cache-ttl` (seconds) or `ICS_CACHE_TTL_SECONDS`.
+- Disable cache by setting `--cache-ttl 0`.
+- Override cache location with `--cache-dir` or `ICS_CACHE_DIR`.
+- Default cache path:
+  - `$XDG_CACHE_HOME/stu-skills/ics-calendar-reader`
+  - or `~/.cache/stu-skills/ics-calendar-reader` when `XDG_CACHE_HOME` is unset.
+
 ## Output Contract
 
 Expect each event to include:

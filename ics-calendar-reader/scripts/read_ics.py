@@ -5,10 +5,12 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import os
 import re
 import sys
+import urllib.error
 import urllib.request
 from urllib.parse import urlsplit, urlunsplit
 from pathlib import Path
@@ -22,6 +24,22 @@ except Exception:  # pragma: no cover
 
 DATE_RE = re.compile(r"^\d{8}$")
 DATETIME_RE = re.compile(r"^\d{8}T\d{6}Z?$")
+WEEKDAY_ABBR = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+MONTH_ABBR = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+]
+DEFAULT_CACHE_TTL_SECONDS = 900
 
 
 def parse_env_line(line: str) -> Optional[Tuple[str, str]]:
@@ -238,6 +256,22 @@ def normalize_event_start(event: Dict[str, object]) -> Optional[dt.datetime]:
         return None
 
 
+def normalize_event_end(event: Dict[str, object]) -> Optional[dt.datetime]:
+    end = event.get("end")
+    if not isinstance(end, str):
+        return normalize_event_start(event)
+    try:
+        if len(end) == 10:
+            d = dt.date.fromisoformat(end)
+            return dt.datetime.combine(d, dt.time.min).replace(tzinfo=dt.timezone.utc)
+        parsed = dt.datetime.fromisoformat(end)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=dt.timezone.utc)
+        return parsed
+    except Exception:
+        return normalize_event_start(event)
+
+
 def format_local_datetime(value: object, all_day: bool = False) -> Optional[str]:
     if not isinstance(value, str):
         return None
@@ -246,18 +280,32 @@ def format_local_datetime(value: object, all_day: bool = False) -> Optional[str]
         local_tz = dt.datetime.now().astimezone().tzinfo
         if len(value) == 10:
             d = dt.date.fromisoformat(value)
+            weekday = WEEKDAY_ABBR[d.weekday()]
+            month = MONTH_ABBR[d.month - 1]
             if all_day:
-                return f"{d.strftime('%a')} {d.day} {d.strftime('%b %Y')} (all day)"
+                return f"{weekday} {d.day} {month} {d.year} (all day)"
             local_dt = dt.datetime.combine(d, dt.time.min).replace(tzinfo=local_tz)
-            return f"{local_dt.strftime('%a')} {local_dt.day} {local_dt.strftime('%b %Y %H:%M')}"
+            weekday = WEEKDAY_ABBR[local_dt.weekday()]
+            month = MONTH_ABBR[local_dt.month - 1]
+            return f"{weekday} {local_dt.day} {month} {local_dt.year} {local_dt:%H:%M}"
 
         parsed = dt.datetime.fromisoformat(value)
         if parsed.tzinfo is None:
             parsed = parsed.replace(tzinfo=local_tz)
         local_dt = parsed.astimezone(local_tz)
-        return f"{local_dt.strftime('%a')} {local_dt.day} {local_dt.strftime('%b %Y %H:%M')}"
+        weekday = WEEKDAY_ABBR[local_dt.weekday()]
+        month = MONTH_ABBR[local_dt.month - 1]
+        return f"{weekday} {local_dt.day} {month} {local_dt.year} {local_dt:%H:%M}"
     except Exception:
         return value
+
+
+def add_display_datetimes(events: List[Dict[str, object]]) -> List[Dict[str, object]]:
+    for event in events:
+        all_day = bool(event.get("all_day"))
+        event["start_local"] = format_local_datetime(event.get("start"), all_day)
+        event["end_local"] = format_local_datetime(event.get("end"), all_day)
+    return events
 
 
 def filter_events(
@@ -267,14 +315,20 @@ def filter_events(
     limit: Optional[int],
 ) -> List[Dict[str, object]]:
     annotated: List[Tuple[dt.datetime, Dict[str, object]]] = []
+    now = dt.datetime.now(dt.timezone.utc)
     for event in events:
         start = normalize_event_start(event)
-        if start is None:
+        end = normalize_event_end(event)
+        if start is None or end is None:
             continue
-        if after and start < after:
+
+        # Overlap filtering so long-running events are included.
+        if after and end < after:
             continue
         if before and start > before:
             continue
+
+        event["is_ongoing"] = start <= now <= end
         annotated.append((start, event))
 
     annotated.sort(key=lambda pair: pair[0])
@@ -329,6 +383,107 @@ def normalize_calendar_url(url: str) -> str:
     return url
 
 
+def default_cache_dir() -> Path:
+    env_cache_dir = os.environ.get("ICS_CACHE_DIR")
+    if env_cache_dir:
+        return Path(os.path.expanduser(env_cache_dir))
+
+    xdg_cache_home = os.environ.get("XDG_CACHE_HOME")
+    if xdg_cache_home:
+        base = Path(os.path.expanduser(xdg_cache_home))
+    else:
+        base = Path.home() / ".cache"
+    return base / "stu-skills" / "ics-calendar-reader"
+
+
+def url_cache_key(url: str) -> str:
+    return hashlib.sha256(url.encode("utf-8")).hexdigest()
+
+
+def parse_cached_timestamp(value: object) -> Optional[dt.datetime]:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = dt.datetime.fromisoformat(value)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=dt.timezone.utc)
+        return parsed
+    except Exception:
+        return None
+
+
+def fetch_ics_url_content(url: str, cache_dir: Path, cache_ttl: int) -> str:
+    if cache_ttl <= 0:
+        with urllib.request.urlopen(url) as response:
+            return response.read().decode("utf-8", errors="replace")
+
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    key = url_cache_key(url)
+    body_path = cache_dir / f"{key}.ics"
+    meta_path = cache_dir / f"{key}.json"
+
+    meta: Dict[str, object] = {}
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except Exception:
+            meta = {}
+
+    now = dt.datetime.now(dt.timezone.utc)
+    fetched_at = parse_cached_timestamp(meta.get("fetched_at"))
+    if body_path.exists() and fetched_at is not None:
+        age_seconds = (now - fetched_at).total_seconds()
+        if age_seconds <= cache_ttl:
+            return body_path.read_text(encoding="utf-8", errors="replace")
+
+    headers: Dict[str, str] = {}
+    etag = meta.get("etag")
+    last_modified = meta.get("last_modified")
+    if isinstance(etag, str) and etag:
+        headers["If-None-Match"] = etag
+    if isinstance(last_modified, str) and last_modified:
+        headers["If-Modified-Since"] = last_modified
+
+    request = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(request) as response:
+            content = response.read().decode("utf-8", errors="replace")
+            body_path.write_text(content, encoding="utf-8")
+            updated_meta = {
+                "url": url,
+                "fetched_at": now.isoformat(),
+                "etag": response.headers.get("ETag"),
+                "last_modified": response.headers.get("Last-Modified"),
+            }
+            meta_path.write_text(json.dumps(updated_meta, indent=2), encoding="utf-8")
+            return content
+    except urllib.error.HTTPError as exc:
+        if exc.code == 304 and body_path.exists():
+            meta["url"] = url
+            meta["fetched_at"] = now.isoformat()
+            meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+            return body_path.read_text(encoding="utf-8", errors="replace")
+        raise
+    except Exception:
+        if body_path.exists():
+            print(
+                f"Warning: fetch failed for {url}; using stale cached calendar content.",
+                file=sys.stderr,
+            )
+            return body_path.read_text(encoding="utf-8", errors="replace")
+        raise
+
+
+def get_default_cache_ttl() -> int:
+    raw = os.environ.get("ICS_CACHE_TTL_SECONDS")
+    if raw is None:
+        return DEFAULT_CACHE_TTL_SECONDS
+    try:
+        return max(int(raw), 0)
+    except ValueError:
+        return DEFAULT_CACHE_TTL_SECONDS
+
+
 def main() -> int:
     skill_root = Path(__file__).resolve().parent.parent
     load_env_defaults(skill_root)
@@ -346,6 +501,20 @@ def main() -> int:
     parser.add_argument("--before", help="ISO datetime")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--format", choices=["json", "text"], default="text")
+    parser.add_argument(
+        "--cache-ttl",
+        type=int,
+        default=get_default_cache_ttl(),
+        help=(
+            "Cache TTL in seconds for downloaded ICS URLs (default: 900). "
+            "Set to 0 to disable cache."
+        ),
+    )
+    parser.add_argument(
+        "--cache-dir",
+        default=None,
+        help="Directory for ICS URL cache files (default: XDG cache path).",
+    )
     args = parser.parse_args()
 
     if args.url:
@@ -384,15 +553,22 @@ def main() -> int:
         content = Path(args.ics_path).read_text(encoding="utf-8", errors="replace")
         events.extend(parse_ics_events(content))
 
+    cache_dir = Path(os.path.expanduser(args.cache_dir)) if args.cache_dir else default_cache_dir()
+    cache_ttl = max(args.cache_ttl, 0)
+
     for url in urls:
         normalized_url = normalize_calendar_url(url)
-        with urllib.request.urlopen(normalized_url) as response:
-            content = response.read().decode("utf-8", errors="replace")
+        content = fetch_ics_url_content(
+            normalized_url,
+            cache_dir=cache_dir,
+            cache_ttl=cache_ttl,
+        )
         events.extend(parse_ics_events(content))
 
     after = parse_filter_dt(args.after) if args.after else None
     before = parse_filter_dt(args.before) if args.before else None
     filtered = filter_events(events, after=after, before=before, limit=args.limit)
+    filtered = add_display_datetimes(filtered)
 
     if args.format == "json":
         print(json.dumps(filtered, indent=2, ensure_ascii=False))
