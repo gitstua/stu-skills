@@ -7,6 +7,7 @@ Each skill lives in its own folder with a SKILL.md entry point.
 
 - ics-calendar-reader: Parse .ics calendars to JSON or text using scripts/read_ics.py.
 - ntfy-notify: Send ntfy.sh notifications using scripts/ntfy_send.sh.
+- outbound-ip: Get current public/outbound IP using scripts/get_outbound_ip.sh with endpoint fallback.
 
 ## Repo Layout
 
