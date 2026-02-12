@@ -30,6 +30,12 @@ Each skill lives in its own folder with a SKILL.md entry point.
 These skills are plain Markdown with optional helper scripts. Any tool that
 supports a custom skills directory can load them.
 
+Quick setup with `skills.sh`:
+
+```bash
+npx skills add gitstua/stu-skills
+```
+
 1) Pick a shared skills directory.
 
 - Example: ~/.agents/skills
