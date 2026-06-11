@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Safe macOS cache cleanup: npm, pip3, Homebrew downloads
+# Safe macOS cache cleanup: npm, pip3, uv, Homebrew downloads
 set -euo pipefail
 
 freed=0
@@ -21,6 +21,14 @@ if command -v pip3 &>/dev/null; then
   size=$(du -sm ~/Library/Caches/pip 2>/dev/null | cut -f1 || echo 0)
   pip3 cache purge 2>/dev/null || true
   echo "pip3: freed ~${size} MB"
+  freed=$((freed + size))
+fi
+
+# uv cache
+if command -v uv &>/dev/null; then
+  size=$(du -sm ~/.cache/uv 2>/dev/null | cut -f1 || echo 0)
+  uv cache clean 2>/dev/null || true
+  echo "uv: freed ~${size} MB"
   freed=$((freed + size))
 fi
 

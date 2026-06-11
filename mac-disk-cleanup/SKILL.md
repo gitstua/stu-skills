@@ -1,6 +1,6 @@
 ---
 name: mac-disk-cleanup
-description: Free disk space on macOS by cleaning dev caches (npm, pip, Homebrew) and removing stale node_modules from old projects. Use this skill whenever the user mentions disk space, storage full, Mac running out of space, cleaning up node_modules, or wants to free space on their Mac — even if they don't say "cleanup" explicitly.
+description: Free disk space on macOS by cleaning dev caches (npm, pip, uv, Homebrew) and removing stale node_modules from old projects. Use this skill whenever the user mentions disk space, storage full, Mac running out of space, cleaning up node_modules, or wants to free space on their Mac — even if they don't say "cleanup" explicitly.
 ---
 
 # Mac Disk Cleanup
@@ -12,6 +12,7 @@ Two-part workflow: safe cache cleanup, then stale node_modules removal.
 Run `scripts/clean_caches.sh`. This clears:
 - npm cache (`~/.npm`)
 - pip3 cache (`~/Library/Caches/pip`)
+- uv cache (`~/.cache/uv`)
 - Homebrew old versions + downloads cache
 
 Report MB freed per tool.
