@@ -1,6 +1,6 @@
 ---
 name: mac-disk-cleanup
-description: Free disk space on macOS by cleaning dev caches (npm, pip, uv, Homebrew) and removing stale node_modules from old projects. Use this skill whenever the user mentions disk space, storage full, Mac running out of space, cleaning up node_modules, or wants to free space on their Mac — even if they don't say "cleanup" explicitly.
+description: Free disk space on macOS by cleaning dev caches (npm, pip, uv, Homebrew), removing stale node_modules from old projects, and optionally removing LM Studio or Ollama models after confirmation. Use this skill whenever the user mentions disk space, storage full, Mac running out of space, cleaning up node_modules, LM Studio models, Ollama models, or wants to free space on their Mac — even if they don't say "cleanup" explicitly.
 ---
 
 # Mac Disk Cleanup
@@ -17,7 +17,39 @@ Run `scripts/clean_caches.sh`. This clears:
 
 Report MB freed per tool.
 
-## Part 2 — node_modules audit and cleanup
+## Part 2 — LM Studio / Ollama model cleanup (confirmation required)
+
+These models are large files that can't be re-downloaded automatically — always confirm before deleting.
+
+### LM Studio
+
+List installed models with sizes:
+```bash
+find ~/.lmstudio/models -name "*.gguf" -o -name "*.safetensors" 2>/dev/null \
+  | xargs du -sh 2>/dev/null | sort -rh
+```
+
+Show the list to the user and ask which models to remove. Delete by removing the model's parent folder (e.g. `~/.lmstudio/models/publisher/model-name/`) so stale metadata doesn't linger.
+
+### Ollama
+
+List installed models:
+```bash
+ollama list 2>/dev/null
+```
+
+For each model the user wants to remove:
+```bash
+ollama rm <model-name>
+```
+
+This is the correct removal method — do not delete `~/.ollama/models/blobs/` directly, as Ollama manages content-addressed storage there and manual deletion can corrupt the store.
+
+### Confirmation rule
+
+Always show a summary of what will be deleted and its total size, then ask: "OK to delete these models?" before proceeding. Never delete models without an explicit yes.
+
+## Part 3 — node_modules audit and cleanup
 
 ### Find candidates
 
@@ -43,7 +75,9 @@ Use the parent directory's last-modified date to judge staleness:
 These are already excluded by the script, but double-check you never delete from:
 - `~/.nvm/` — node version manager (removing breaks node)
 - `~/.vscode/extensions/` — VS Code manages these
-- `~/.copilot/`, `~/.lmstudio/`, `~/.cache/opencode/` — tool-managed
+- `~/.copilot/`, `~/.cache/opencode/` — tool-managed
+- `~/.lmstudio/` outside of `models/` — app config, not models
+- `~/.ollama/models/blobs/` — use `ollama rm` instead of direct deletion
 
 ### Clean and report
 
